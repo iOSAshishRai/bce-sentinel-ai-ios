@@ -1,0 +1,28 @@
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# Credentials and secrets
+.env
+.env.*
+*.pem
+*.p8
+*.p12
+*.mobileprovision
+GoogleService-Info.plist
+ServiceAccount*.json
+service-account*.json
+credentials.json
+Secrets.swift
