@@ -26,3 +26,10 @@ ServiceAccount*.json
 service-account*.json
 credentials.json
 Secrets.swift
+
+# Python backend
+backend/.venv/
+backend/__pycache__/
+backend/**/*.pyc
+backend/.env
+backend/.env.*
