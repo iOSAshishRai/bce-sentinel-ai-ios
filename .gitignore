@@ -33,3 +33,7 @@ backend/__pycache__/
 backend/**/*.pyc
 backend/.env
 backend/.env.*
+
+# Python generated files
+__pycache__/
+*.py[cod]
