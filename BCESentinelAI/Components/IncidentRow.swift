@@ -33,7 +33,13 @@ struct IncidentRow: View {
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
-                    Text(incident.detectedAt, style: .relative)
+                    Text(
+                        incident.detectedAt,
+                        format: .relative(
+                            presentation: .named,
+                            unitsStyle: .abbreviated
+                        )
+                    )
 
                     Circle()
                         .fill(AppTheme.secondaryText)

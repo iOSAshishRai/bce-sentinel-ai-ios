@@ -24,10 +24,12 @@ final class IncidentAnalysisViewModel: ObservableObject {
 
     private let service: IncidentAnalysisServiceProtocol
 
-    init(
-        service: IncidentAnalysisServiceProtocol = IncidentAnalysisService()
-    ) {
+    init(service: IncidentAnalysisServiceProtocol) {
         self.service = service
+    }
+
+    init() {
+        self.service = IncidentAnalysisService()
     }
 
     func analyze(_ incident: Incident) async {

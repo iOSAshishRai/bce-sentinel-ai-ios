@@ -10,6 +10,7 @@ import SwiftUI
 struct DashboardView: View {
     @StateObject private var viewModel = DashboardViewModel()
 
+    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -43,6 +44,7 @@ struct DashboardView: View {
     }
 
     private var header: some View {
+    
         HStack(spacing: 12) {
             Button {
                 // Menu action will be added later.
@@ -175,43 +177,14 @@ struct DashboardView: View {
                     NavigationLink {
                         IncidentAnalysisView(incident: incident)
                     } label: {
-                        IncidentRow(incident: incident)
+                        IncidentCard(incident: incident)
                     }
                     .buttonStyle(.plain)
                 }
             }
-        }
-    }
-}
-
-private struct IncidentPlaceholderView: View {
-    let incident: Incident
-
-    var body: some View {
-        ZStack {
-            AppTheme.background
-                .ignoresSafeArea()
-
-            VStack(spacing: 16) {
-                Image(systemName: incident.severity.iconName)
-                    .font(.system(size: 46))
-                    .foregroundStyle(incident.severity.color)
-
-                Text(incident.title)
-                    .font(.title2.bold())
-                    .foregroundStyle(AppTheme.primaryText)
-
-                Text("Gemini incident analysis will appear here.")
-                    .font(.subheadline)
-                    .foregroundStyle(AppTheme.secondaryText)
             }
-            .padding()
         }
-        .navigationTitle("Incident Analysis")
-        .navigationBarTitleDisplayMode(.inline)
     }
-}
-
 #Preview {
     DashboardView()
 }

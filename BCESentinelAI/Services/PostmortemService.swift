@@ -71,9 +71,7 @@ final class PostmortemService: PostmortemServiceProtocol {
 
     init(
         session: URLSession = .shared,
-        baseURL: URL = URL(
-            string: "https://bce-sentinel-api-1074500010864.asia-south1.run.app"
-        )!
+        baseURL: URL = APIConfiguration.cloudRunBaseURL
     ) {
         self.session = session
         self.baseURL = baseURL
@@ -88,7 +86,7 @@ final class PostmortemService: PostmortemServiceProtocol {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 60
+        request.timeoutInterval = APIConfiguration.requestTimeout
 
         request.setValue(
             "application/json",
