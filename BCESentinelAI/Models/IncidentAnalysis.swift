@@ -18,18 +18,11 @@ struct IncidentAnalysis: Codable, Hashable {
 }
 
 struct AnalysisEvidence: Identifiable, Codable, Hashable {
-    let id: UUID
     let title: String
     let detail: String
 
-    init(
-        id: UUID = UUID(),
-        title: String,
-        detail: String
-    ) {
-        self.id = id
-        self.title = title
-        self.detail = detail
+    var id: String {
+        "\(title)-\(detail)"
     }
 }
 
