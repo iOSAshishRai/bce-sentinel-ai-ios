@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import FastAPI, HTTPException
@@ -296,6 +297,162 @@ REQUIREMENTS:
             status_code=500,
             detail=(
                 "Gemini incident analysis failed: "
+                f"{type(error).__name__}: {str(error)}"
+            ),
+        ) from error
+
+
+# MARK: - Postmortem Models
+
+class PostmortemAnalysisInput(BaseModel):
+    rootCause: str
+    confidence: int
+    explanation: str
+
+
+class RemediationResultInput(BaseModel):
+    action: str
+    recoveryTimeSeconds: int
+    affectedCustomers: int
+
+
+class PostmortemRequest(BaseModel):
+    incident: IncidentRequest
+    analysis: PostmortemAnalysisInput
+    result: RemediationResultInput
+
+
+class PreventionActionResponse(BaseModel):
+    title: str
+    description: str
+    priority: str
+
+
+class IncidentPostmortemResponse(BaseModel):
+    id: str
+    incidentID: str
+    generatedAt: str
+    summary: str
+    rootCause: str
+    resolution: str
+    customerImpact: str
+    preventionActions: List[PreventionActionResponse]
+
+
+# MARK: - Postmortem Endpoint
+
+@app.post(
+    "/postmortem",
+    response_model=IncidentPostmortemResponse,
+)
+def generate_postmortem(
+    request: PostmortemRequest,
+) -> IncidentPostmortemResponse:
+    incident = request.incident
+    analysis = request.analysis
+    result = request.result
+
+    prompt = f"""
+You are BCE Sentinel AI, an enterprise incident-response system.
+
+Generate a concise enterprise incident postmortem using the supplied
+incident, root-cause analysis, and remediation result.
+
+INCIDENT:
+
+{incident.model_dump_json(indent=2)}
+
+ROOT-CAUSE ANALYSIS:
+
+{analysis.model_dump_json(indent=2)}
+
+REMEDIATION RESULT:
+
+{result.model_dump_json(indent=2)}
+
+REQUIREMENTS:
+
+1. Set incidentID to exactly "{incident.id}".
+2. Set rootCause to the supplied root cause.
+3. Explain the incident in clear enterprise language.
+4. Describe the remediation that was executed.
+5. Describe customer impact truthfully.
+6. Return exactly three prevention actions.
+7. Use only high, medium, or low for priority.
+8. Do not invent customer impact beyond the supplied result.
+9. Do not claim that this action occurred in a real production system.
+10. This is a controlled hackfest simulation.
+11. Return only data matching the required schema.
+"""
+
+    try:
+        logger.info(
+            "Generating postmortem for incident %s",
+            incident.id,
+        )
+
+        client = create_genai_client()
+
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.2,
+                response_mime_type="application/json",
+                response_schema=IncidentPostmortemResponse,
+            ),
+        )
+
+        if response.parsed is not None:
+            if isinstance(
+                response.parsed,
+                IncidentPostmortemResponse,
+            ):
+                postmortem = response.parsed
+            else:
+                postmortem = IncidentPostmortemResponse.model_validate(
+                    response.parsed
+                )
+        else:
+            if not response.text:
+                raise ValueError(
+                    "Gemini returned an empty postmortem response."
+                )
+
+            postmortem = (
+                IncidentPostmortemResponse.model_validate_json(
+                    response.text
+                )
+            )
+
+        postmortem = postmortem.model_copy(
+            update={
+                "id": incident.id + "-postmortem",
+                "incidentID": incident.id,
+                "generatedAt": datetime.now(
+                    timezone.utc
+                ).isoformat().replace("+00:00", "Z"),
+                "rootCause": analysis.rootCause,
+            }
+        )
+
+        logger.info(
+            "Postmortem generated for incident %s",
+            incident.id,
+        )
+
+        return postmortem
+
+    except Exception as error:
+        logger.exception(
+            "Postmortem generation failed for incident %s",
+            incident.id,
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Gemini postmortem generation failed: "
                 f"{type(error).__name__}: {str(error)}"
             ),
         ) from error

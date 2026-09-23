@@ -15,60 +15,149 @@ protocol PostmortemServiceProtocol {
     ) async throws -> IncidentPostmortem
 }
 
+enum PostmortemServiceError: LocalizedError {
+    case invalidResponse
+    case serverError(statusCode: Int, message: String)
+    case decodingFailed(Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return "The postmortem service returned an invalid response."
+
+        case .serverError(let statusCode, let message):
+            return "Server error \(statusCode): \(message)"
+
+        case .decodingFailed(let error):
+            return "Unable to decode the postmortem: \(error.localizedDescription)"
+        }
+    }
+}
+
+private struct PostmortemRequest: Encodable {
+    let incident: IncidentRequestPayload
+    let analysis: PostmortemAnalysisPayload
+    let result: RemediationResultPayload
+}
+
+private struct IncidentRequestPayload: Encodable {
+    let id: String
+    let title: String
+    let service: String
+    let severity: String
+    let message: String
+}
+
+private struct PostmortemAnalysisPayload: Encodable {
+    let rootCause: String
+    let confidence: Int
+    let explanation: String
+}
+
+private struct RemediationResultPayload: Encodable {
+    let action: String
+    let recoveryTimeSeconds: Int
+    let affectedCustomers: Int
+}
+
+private struct PostmortemBackendError: Decodable {
+    let detail: String
+}
+
 final class PostmortemService: PostmortemServiceProtocol {
+
+    private let session: URLSession
+    private let baseURL: URL
+
+    init(
+        session: URLSession = .shared,
+        baseURL: URL = URL(
+            string: "https://bce-sentinel-api-1074500010864.asia-south1.run.app"
+        )!
+    ) {
+        self.session = session
+        self.baseURL = baseURL
+    }
 
     func generate(
         incident: Incident,
         analysis: IncidentAnalysis,
         result: RemediationResult
     ) async throws -> IncidentPostmortem {
-        // Simulates a Gemini API request.
-        try await Task.sleep(for: .seconds(2))
+        let url = baseURL.appendingPathComponent("postmortem")
 
-        return IncidentPostmortem(
-            incidentID: incident.id,
-            summary: """
-            The \(incident.service) experienced elevated response times \
-            after the available database connections reached maximum capacity. \
-            The incident was detected and resolved through an automated \
-            remediation workflow.
-            """,
-            rootCause: analysis.rootCause,
-            resolution: """
-            BCE Sentinel AI performed a controlled restart of the unhealthy \
-            Billing API instance. Service health checks completed successfully, \
-            and response times returned to normal.
-            """,
-            customerImpact: """
-            No customers were affected during the controlled recovery. \
-            The service recovered in \(result.recoveryTimeSeconds) seconds.
-            """,
-            preventionActions: [
-                PreventionAction(
-                    title: "Increase connection pool capacity",
-                    description: """
-                    Review peak database demand and update the connection \
-                    pool limit based on expected traffic.
-                    """,
-                    priority: .high
-                ),
-                PreventionAction(
-                    title: "Add predictive threshold monitoring",
-                    description: """
-                    Raise an early warning when connection pool utilization \
-                    exceeds 75 percent.
-                    """,
-                    priority: .high
-                ),
-                PreventionAction(
-                    title: "Enable automated service scaling",
-                    description: """
-                    Scale Billing API replicas when sustained latency or \
-                    connection demand exceeds normal thresholds.
-                    """,
-                    priority: .medium
-                )
-            ]
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
         )
+
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField: "Accept"
+        )
+
+        let payload = PostmortemRequest(
+            incident: IncidentRequestPayload(
+                id: incident.id,
+                title: incident.title,
+                service: incident.service,
+                severity: incident.severity.rawValue,
+                message: incident.message
+            ),
+            analysis: PostmortemAnalysisPayload(
+                rootCause: analysis.rootCause,
+                confidence: analysis.confidence,
+                explanation: analysis.explanation
+            ),
+            result: RemediationResultPayload(
+                action: result.action,
+                recoveryTimeSeconds: result.recoveryTimeSeconds,
+                affectedCustomers: result.affectedCustomers
+            )
+        )
+
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        let (data, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PostmortemServiceError.invalidResponse
+        }
+
+        #if DEBUG
+        print("Postmortem status:", httpResponse.statusCode)
+        print(
+            "Postmortem response:",
+            String(data: data, encoding: .utf8) ?? "Unreadable"
+        )
+        #endif
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let backendError = try? JSONDecoder().decode(
+                PostmortemBackendError.self,
+                from: data
+            )
+
+            throw PostmortemServiceError.serverError(
+                statusCode: httpResponse.statusCode,
+                message: backendError?.detail ?? "Unknown error"
+            )
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            return try decoder.decode(
+                IncidentPostmortem.self,
+                from: data
+            )
+        } catch {
+            throw PostmortemServiceError.decodingFailed(error)
+        }
     }
 }
